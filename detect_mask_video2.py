@@ -17,13 +17,18 @@ import threading
 import pyttsx3
 import sys
 import xlsxwriter
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from openpyxl import load_workbook
+
 
 from datetime import datetime
 Contador1 = int(0)
 Contador2 = int(0)
 Contador3 = int(0)
 identificador=int(0)
+
+#logging.basicConfig(level=logging.DEBUG, format='%(threadName)s: %(message)s')
 
 def detect_and_predict_mask(frame, faceNet, maskNet):
 
@@ -117,6 +122,7 @@ vs = VideoStream(src=0).start()
 time.sleep(2.0)
 
 # loop over the frames from the video stream
+executor = ThreadPoolExecutor(max_workers=1)
 while True:
 	# grab the frame from the threaded video stream and resize it
 	# to have a maximum width of 400 pixels
@@ -164,39 +170,22 @@ while True:
 		wb.save(filepath)
 		# include the probability in the label
 		label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
+		
+		#logging.info('Estamos en el principal')
 		if (withoutMask * 100) > 97:
-                                #speedo = Image.open('reserva.jpg').convert('RGBA')
-                                #imagen=Image.fromarray(frame)
-                                #imagen.paste(speedo,box=(230,80),mask=speedo)
-                                #frame= np.array(imagen)
-                                #voz.textTovoice(" bienvenido saco güeas".format(text))
-                                #App1()
-                                filepath1="Datos.xlsx"
-		# load demo.xlsx 
-                                wb1=load_workbook(filepath1)
-# select demo.xlsx
-                                sheet1=wb1.active
-# set value for cell A1=1
-                                sheet1['A1'] = 0
-                                wb1.save(filepath1)
-                                voz2.paass(label)
-                                #cv2.putText(frame, text, (0, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 200, 255), 2)
-                                
+		#	threadVoz = threading.Thread(target=voz2.voz, args=(0))
+		#	threadUI = threading.Thread(target=voz2.paass, args=(label,0))
+		#	threadVoz.start()
+		#	threadUI.start()
+			executor.submit(voz2.voz,0)
+			voz2.paass(label,0)
+		#	voz2.paass(label,0)
+		#	voz2.voz(0)
+           
+		
 		if (withoutMask*100) < 97:
-
-                                filepath1="Datos.xlsx"
-		# load demo.xlsx 
-                                wb1=load_workbook(filepath1)
-# select demo.xlsx
-                                sheet1=wb1.active
-# set value for cell A1=1
-                                sheet1['A1'] = 1
-                                wb1.save(filepath1)
-                                voz2.paass(label)
-                                #cv2.putText(frame, text, (0, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 200, 255), 2)
-                                
-
-
+			executor.submit(voz2.voz,1)
+			voz2.paass(label,1)                                
 		# display the label and bounding box rectangle on the output
 		# frame
 		cv2.putText(frame, label, (startX, startY - 10),
