@@ -20,7 +20,7 @@ import xlsxwriter
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from openpyxl import load_workbook
-
+from utilidades import image_resize
 
 from datetime import datetime
 Contador1 = int(0)
@@ -120,6 +120,9 @@ maskNet = load_model(args["model"])
 print("[INFO] starting video stream...")
 vs = VideoStream(src=0).start()
 time.sleep(2.0)
+logo = cv2.imread('LOGO-EQYS.png',-1)
+logoCambiado=image_resize(logo , height=50)
+logoCambiado = cv2.cvtColor(logoCambiado, cv2.COLOR_BGR2BGRA)
 
 # loop over the frames from the video stream
 executor = ThreadPoolExecutor(max_workers=1)
@@ -128,6 +131,7 @@ while True:
 	# to have a maximum width of 400 pixels
 	frame = vs.read()
 	frame = imutils.resize(frame, width=600)
+
 
 	# detect faces in the frame and determine if they are wearing a
 	# face mask or not
@@ -144,13 +148,15 @@ while True:
 		# the bounding box and text
 		label = "Tiene mascarilla" if mask > withoutMask else "No tiene mascarilla"
 		color = (0, 255, 0) if label == "Tiene mascarilla" else (0, 0, 255)
+	#	print("mascarilla: "+str(mask))
+	#	print("sin mascarilla: "+str(withoutMask))
 		if mask > withoutMask:
-			time.sleep(1)
+		#	time.sleep(1)
 			Contador1 = Contador1 + 1
 			Contador3 = Contador2 + Contador1
 			print(Contador1,Contador3)
 		if withoutMask > mask:
-			time.sleep(1)
+		#	time.sleep(1)
 			Contador2 = Contador2 + 1
 			Contador3 = Contador2 + Contador1
 			print(Contador2,Contador3)
@@ -170,18 +176,11 @@ while True:
 		wb.save(filepath)
 		# include the probability in the label
 		label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
-		
 		#logging.info('Estamos en el principal')
+		print(withoutMask)
 		if (withoutMask * 100) > 97:
-		#	threadVoz = threading.Thread(target=voz2.voz, args=(0))
-		#	threadUI = threading.Thread(target=voz2.paass, args=(label,0))
-		#	threadVoz.start()
-		#	threadUI.start()
 			executor.submit(voz2.voz,0)
-			voz2.paass(label,0)
-		#	voz2.paass(label,0)
-		#	voz2.voz(0)
-           
+			voz2.paass(label,0)         
 		
 		if (withoutMask*100) < 97:
 			executor.submit(voz2.voz,1)
@@ -191,10 +190,21 @@ while True:
 		cv2.putText(frame, label, (startX, startY - 10),
 			cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 		cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
+	
+	frame = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
+	frame_h, frame_w, frame_c = frame.shape
+	overlay = np.zeros((frame_h, frame_w, 4), dtype='uint8')
+	logo_h,logo_w,logo_c = logoCambiado.shape
+	for i in range(0,logo_h):
+		for j in range(0,logo_w):
+			if logoCambiado[i,j][3] != 0:
+				overlay[i,j] = logoCambiado[i,j]
 
-
+	
+	cv2.addWeighted(overlay,0.25,frame,1.0,0,frame)
+	frame=cv2.cvtColor(frame,cv2.COLOR_BGRA2BGR)
 	# show the output frame
-	cv2.imshow("Frame", frame)
+	cv2.imshow("Detector de mascarilla", frame)
     
 	key = cv2.waitKey(1) & 0xFF
 

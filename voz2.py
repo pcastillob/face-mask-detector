@@ -28,11 +28,11 @@ def voz(mascarillaBool):
    # logging.info('Ejecutando voz')
     engine = pyttsx3.init()
     engine.setProperty('rate',140)
-    if mascarillaBool==0:
-        engine.say("ponte mascarilla")
+    if mascarillaBool==1:
+        engine.say("siga adelante")
         engine.runAndWait()
     else:
-        engine.say("siga adelante")
+        engine.say("ponte mascarilla")
         engine.runAndWait()
 
 def paass(label,mascarillaBool):
