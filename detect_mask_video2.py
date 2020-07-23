@@ -11,6 +11,7 @@ import argparse
 import imutils
 import time
 import cv2
+#from PIL import Image,ImageFont,ImageDraw
 import voz2
 import os
 import threading
@@ -18,6 +19,7 @@ import pyttsx3
 import sys
 import xlsxwriter
 import logging
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from openpyxl import load_workbook
 from utilidades import image_resize
@@ -126,71 +128,68 @@ logoCambiado = cv2.cvtColor(logoCambiado, cv2.COLOR_BGR2BGRA)
 
 # loop over the frames from the video stream
 executor = ThreadPoolExecutor(max_workers=1)
+contador = 0
+totalMask= 0
+totalSinMask= 0
+contadorFrames = 0
+detectaRostro = False
 while True:
 	# grab the frame from the threaded video stream and resize it
 	# to have a maximum width of 400 pixels
 	frame = vs.read()
-	frame = imutils.resize(frame, width=600)
-
-
+	frame = imutils.resize(frame, width=720)	
 	# detect faces in the frame and determine if they are wearing a
 	# face mask or not
-	(locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
+	
+	#flipHorizontal = cv2.flip(frame,1)
 
+	(locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
 	# loop over the detected face locations and their corresponding
 	# locations
+	contadorFrames +=1
+	if contadorFrames == 48:	
+		contador=0
+		totalMask=0
+		totalSinMask=0
 	for (box, pred) in zip(locs, preds):
                 # unpack the bounding box and predictions
-
 		(startX, startY, endX, endY) = box
 		(mask, withoutMask) = pred
 		# determine the class label and color we'll use to draw
 		# the bounding box and text
 		label = "Tiene mascarilla" if mask > withoutMask else "No tiene mascarilla"
 		color = (0, 255, 0) if label == "Tiene mascarilla" else (0, 0, 255)
-	#	print("mascarilla: "+str(mask))
-	#	print("sin mascarilla: "+str(withoutMask))
-		if mask > withoutMask:
-		#	time.sleep(1)
-			Contador1 = Contador1 + 1
-			Contador3 = Contador2 + Contador1
-			print(Contador1,Contador3)
-		if withoutMask > mask:
-		#	time.sleep(1)
-			Contador2 = Contador2 + 1
-			Contador3 = Contador2 + Contador1
-			print(Contador2,Contador3)
-		filepath="Registro.xlsx"
-		# load demo.xlsx 
-		wb=load_workbook(filepath)
-# select demo.xlsx
-		sheet=wb.active
-# set value for cell A1=1
-		sheet['B1'] = Contador1
-		sheet['B2'] = Contador2
-		sheet['B3'] = Contador3
-		sheet['A1'] = 'Con mascarilla'
-		sheet['A2'] = 'Sin mascarilla'
-		sheet['A3'] = 'Total'
-# save workbook 
-		wb.save(filepath)
 		# include the probability in the label
 		label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
 		#logging.info('Estamos en el principal')
-		print(withoutMask)
-		if (withoutMask * 100) > 97:
-			executor.submit(voz2.voz,0)
-			voz2.paass(label,0)         
-		
-		if (withoutMask*100) < 97:
-			executor.submit(voz2.voz,1)
-			voz2.paass(label,1)                                
+		#print(withoutMask)
+		contadorFrames=0
+		totalMask +=  mask
+		totalSinMask +=  withoutMask
+		contador = contador+1
+		print(contador)
+		if	contador == 20:
+			contador = 0
+			print("Entró al if")
+			print("Total sin mask: " + str(totalSinMask))
+			print("Total con mask: " + str(totalMask))
+			if totalMask > totalSinMask:
+				print("resultado: con mascarilla")
+				executor.submit(voz2.voz,1)	
+				voz2.MostrarUI(37,1)	
+			else:
+				print("resultado: sin mascarilla")
+				executor.submit(voz2.voz,0)
+				voz2.MostrarUI(38,0)
+			#	subprocess.call("mplayer Audios/Masc/Francisco2.mp3".split())
+			#	voz2.paass(label,0)	
+			                                
 		# display the label and bounding box rectangle on the output
 		# frame
 		cv2.putText(frame, label, (startX, startY - 10),
 			cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 		cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
-	
+	#marca de agua
 	frame = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
 	frame_h, frame_w, frame_c = frame.shape
 	overlay = np.zeros((frame_h, frame_w, 4), dtype='uint8')
@@ -199,8 +198,9 @@ while True:
 		for j in range(0,logo_w):
 			if logoCambiado[i,j][3] != 0:
 				overlay[i,j] = logoCambiado[i,j]
-
-	
+	#configuraciones de formato
+	cv2.namedWindow("Detector de mascarilla", cv2.WND_PROP_FULLSCREEN)
+	cv2.setWindowProperty("Detector de mascarilla",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
 	cv2.addWeighted(overlay,0.25,frame,1.0,0,frame)
 	frame=cv2.cvtColor(frame,cv2.COLOR_BGRA2BGR)
 	# show the output frame
