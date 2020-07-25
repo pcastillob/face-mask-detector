@@ -30,7 +30,11 @@ Contador2 = int(0)
 Contador3 = int(0)
 identificador=int(0)
 
-#logging.basicConfig(level=logging.DEBUG, format='%(threadName)s: %(message)s')
+#pab: funcion para calcular el área de la cara detectada
+def getArea(startY,endY,startX,endX):
+	largo=abs(startY-endY)
+	ancho=abs(startX-endX)
+	return largo*ancho
 
 def detect_and_predict_mask(frame, faceNet, maskNet):
 
@@ -49,21 +53,21 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
 	faces = []
 	locs = []
 	preds = []
+	area=0
 
 	# loop over the detections
 	for i in range(0, detections.shape[2]):
 		# extract the confidence (i.e., probability) associated with
 		# the detection
 		confidence = detections[0, 0, i, 2]
-
 		# filter out weak detections by ensuring the confidence is
 		# greater than the minimum confidence
 		if confidence > args["confidence"]:
+			#print("detectó uno")
 			# compute the (x, y)-coordinates of the bounding box for
 			# the object
 			box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
 			(startX, startY, endX, endY) = box.astype("int")
-
 			# ensure the bounding boxes fall within the dimensions of
 			# the frame
 			(startX, startY) = (max(0, startX), max(0, startY))
@@ -77,14 +81,23 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
 			face = img_to_array(face)
 			face = preprocess_input(face)
 
-			# add the face and bounding boxes to their respective
-			# lists
-			faces.append(face)
-			locs.append((startX, startY, endX, endY))
+			#pab: este es el código para calcular sólo una cara
+			#	  primero se crea la variable areaAux, que tendra un valor 0 (linea 56),
+			# 	  cada vez que detecte una cara en el frame, se calculará el área de dicha cara.
+			# 	  La primera cara calculada siempre pasará el if, por lo que se guardará los datos de la cara en faces, su coordenada en locs y su área en area
+			#     la siguiente cara se le calculará su área y se comparará con la ya guardada (areaAux vs area respectivamente)
+			#     si esta cara tiene mayor área, entonces se eliminan los elementos de la lista de caras y la lista de coordenadas (cara y su ubicación en los pixeles)
+			#	  luego sólo predicirá si esa cara con mayor área tiene o no mascara (linea 105)
+			areaAux=getArea(startY,endY,startX,endX)
+			if areaAux > area:
+				area=areaAux
+				faces.clear()
+				faces.append(face)
+				locs.clear()
+				locs.append((startX, startY, endX, endY))
 
 	# only make a predictions if at least one face was detected
 	if len(faces) > 0:
-        
 		# for faster inference we'll make batch predictions on all
 		# faces at the same time rather than one-by-one predictions
 		# in the above `for` loop
@@ -134,25 +147,24 @@ totalSinMask= 0
 contadorFrames = 0
 detectaRostro = False
 while True:
-	# grab the frame from the threaded video stream and resize it
-	# to have a maximum width of 400 pixels
+
+	#pab: ajustar el width hasta que se vea bien, con 400 o 600 lo veía poco nitido, igual se puede reducir el 1080
 	frame = vs.read()
-	frame = imutils.resize(frame, width=720)	
-	# detect faces in the frame and determine if they are wearing a
-	# face mask or not
+	frame = imutils.resize(frame, width=1080)	
 	
 	#flipHorizontal = cv2.flip(frame,1)
 
 	(locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
-	# loop over the detected face locations and their corresponding
-	# locations
+
+	# pab: probé y detecta 24 frames por segundo, 
+	# 	   si no funciona bien o tu camara tiene otro fps
+	# 	   cambiar ese 48 por fps*2 para tener un margen de 2 segundos
 	contadorFrames +=1
 	if contadorFrames == 48:	
 		contador=0
 		totalMask=0
 		totalSinMask=0
 	for (box, pred) in zip(locs, preds):
-                # unpack the bounding box and predictions
 		(startX, startY, endX, endY) = box
 		(mask, withoutMask) = pred
 		# determine the class label and color we'll use to draw
@@ -161,14 +173,14 @@ while True:
 		color = (0, 255, 0) if label == "Tiene mascarilla" else (0, 0, 255)
 		# include the probability in the label
 		label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
-		#logging.info('Estamos en el principal')
-		#print(withoutMask)
+		
 		contadorFrames=0
 		totalMask +=  mask
 		totalSinMask +=  withoutMask
 		contador = contador+1
-		print(contador)
-		if	contador == 20:
+		#pab: este contador indica que se tomarán 15 fotos de la persona para precedir si lleva o no máscara
+		#	  se puede cambiar a gusto, antes lo tenia en 20 y para probar la ui lo dejaba en 1
+		if	contador == 15:
 			contador = 0
 			print("Entró al if")
 			print("Total sin mask: " + str(totalSinMask))
@@ -180,16 +192,14 @@ while True:
 			else:
 				print("resultado: sin mascarilla")
 				executor.submit(voz2.voz,0)
-				voz2.MostrarUI(38,0)
-			#	subprocess.call("mplayer Audios/Masc/Francisco2.mp3".split())
-			#	voz2.paass(label,0)	
+				voz2.MostrarUI(38.5,0)
 			                                
 		# display the label and bounding box rectangle on the output
 		# frame
 		cv2.putText(frame, label, (startX, startY - 10),
 			cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 		cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
-	#marca de agua
+	#pab: Poner la marca de agua reemplazando los pixeles afectados
 	frame = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
 	frame_h, frame_w, frame_c = frame.shape
 	overlay = np.zeros((frame_h, frame_w, 4), dtype='uint8')
