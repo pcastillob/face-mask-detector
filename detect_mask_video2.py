@@ -164,6 +164,9 @@ while True:
 		contador=0
 		totalMask=0
 		totalSinMask=0
+		contadorFrames=0
+	#if  (totalMask == 0 ) or (totalSinMask == 0):
+	#	cv.
 	for (box, pred) in zip(locs, preds):
 		(startX, startY, endX, endY) = box
 		(mask, withoutMask) = pred
@@ -197,7 +200,7 @@ while True:
 		# display the label and bounding box rectangle on the output
 		# frame
 		cv2.putText(frame, label, (startX, startY - 10),
-			cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
+			cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
 		cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
 	#pab: Poner la marca de agua reemplazando los pixeles afectados
 	frame = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)

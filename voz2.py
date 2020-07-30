@@ -1,17 +1,14 @@
 from pygame import mixer
 from tkinter import *
 from tkinter.font import Font
-from pil import ImageTk, Image
+#from pil import ImageTk, Image
 
-def voz(mascarillaBool):
-    if mascarillaBool==1:
-        mixer.init()
-        mixer.music.load('Audios/Masc/Francisco1.mp3')
-        mixer.music.play()
-    else:
-        mixer.init()
-        mixer.music.load('Audios/Masc/Francisco2.mp3')
-        mixer.music.play()
+def voz(mask):
+    archivo = 'Audios/Masc/Francisco1.ogg' if mask == 1 else 'Audios/Masc/Francisco2.ogg' 
+    mixer.init()
+    mixer.music.load(archivo)
+    mixer.music.play()
+    
 
 def MostrarUI(T,M):
     foto = "ui-pasaste.png" if M ==1 else "ui-denegado.png"
@@ -25,10 +22,11 @@ def MostrarUI(T,M):
     positionRight = int(root.winfo_screenwidth()/2 - windowWidth/2)
     positionDown = int(root.winfo_screenheight()/3 - windowHeight/2)
 
+    imagen=PhotoImage(file=foto)
+
     #Poner una imagen y texto encima con el atributo "compound", los colores se asignan con la funcion from_rgb, que toma una tupla (r,g,b) como parámetro
     #el fondo de la ventana tendrá el mismo color que el marco de la imagen (rgb 155,159,162)
-    root.image=ImageTk.PhotoImage(Image.open(foto))
-    image=Label(root,image=root.image,text="\n\n\n\n\n\n"+str(T)+"°C",bg=from_rgb((155,159,162)),compound=CENTER,font=fontStyle,fg=from_rgb((93,180,39)) if M==1 else from_rgb((254,0,0)))
+    image=Label(root,image=imagen,text="\n\n\n\n\n\n"+str(T)+"°C",bg=from_rgb((155,159,162)),compound=CENTER,font=fontStyle,fg=from_rgb((93,180,39)) if M==1 else from_rgb((254,0,0)))
 
     #a esta ventana emergente se le transparenta el color rgb 155 159 162 para hacer la ilusión de que es una imagen flotando.
     root.attributes("-transparentcolor",from_rgb((155,159,162)) )
