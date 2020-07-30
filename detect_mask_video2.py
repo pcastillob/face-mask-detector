@@ -135,9 +135,6 @@ maskNet = load_model(args["model"])
 print("[INFO] starting video stream...")
 vs = VideoStream(src=0).start()
 time.sleep(2.0)
-logo = cv2.imread('LOGO-EQYS.png',-1)
-logoCambiado=image_resize(logo , height=50)
-logoCambiado = cv2.cvtColor(logoCambiado, cv2.COLOR_BGR2BGRA)
 
 # loop over the frames from the video stream
 executor = ThreadPoolExecutor(max_workers=1)
@@ -145,12 +142,11 @@ contador = 0
 totalMask= 0
 totalSinMask= 0
 contadorFrames = 0
-detectaRostro = False
 while True:
 
 	#pab: ajustar el width hasta que se vea bien, con 400 o 600 lo veía poco nitido, igual se puede reducir el 1080
 	frame = vs.read()
-	frame = imutils.resize(frame, width=1080)	
+	frame = imutils.resize(frame, width=500)	
 	
 	#flipHorizontal = cv2.flip(frame,1)
 
@@ -160,7 +156,7 @@ while True:
 	# 	   si no funciona bien o tu camara tiene otro fps
 	# 	   cambiar ese 48 por fps*2 para tener un margen de 2 segundos
 	contadorFrames +=1
-	if contadorFrames == 48:	
+	if contadorFrames == 48:
 		contador=0
 		totalMask=0
 		totalSinMask=0
@@ -183,7 +179,7 @@ while True:
 		contador = contador+1
 		#pab: este contador indica que se tomarán 15 fotos de la persona para precedir si lleva o no máscara
 		#	  se puede cambiar a gusto, antes lo tenia en 20 y para probar la ui lo dejaba en 1
-		if	contador == 15:
+		if	contador == 5:
 			contador = 0
 			print("Entró al if")
 			print("Total sin mask: " + str(totalSinMask))
@@ -199,22 +195,13 @@ while True:
 			                                
 		# display the label and bounding box rectangle on the output
 		# frame
-		cv2.putText(frame, label, (startX, startY - 10),
-			cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+		
 		cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
 	#pab: Poner la marca de agua reemplazando los pixeles afectados
-	frame = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
-	frame_h, frame_w, frame_c = frame.shape
-	overlay = np.zeros((frame_h, frame_w, 4), dtype='uint8')
-	logo_h,logo_w,logo_c = logoCambiado.shape
-	for i in range(0,logo_h):
-		for j in range(0,logo_w):
-			if logoCambiado[i,j][3] != 0:
-				overlay[i,j] = logoCambiado[i,j]
+	
 	#configuraciones de formato
 	cv2.namedWindow("Detector de mascarilla", cv2.WND_PROP_FULLSCREEN)
 	cv2.setWindowProperty("Detector de mascarilla",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
-	cv2.addWeighted(overlay,0.25,frame,1.0,0,frame)
 	frame=cv2.cvtColor(frame,cv2.COLOR_BGRA2BGR)
 	# show the output frame
 	cv2.imshow("Detector de mascarilla", frame)
