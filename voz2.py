@@ -11,11 +11,12 @@ def voz(mask):
     
 
 def MostrarUI(T,M):
-    foto = "ui-pasaste.png" if M ==1 else "ui-denegado.png"
+    foto = "ui-pasa.png" if M ==1 else "ui2.png"
     root = Tk()
+    
     root.overrideredirect(True)
     fontStyle = Font(family="Arial", size=48)
-
+#    root.wm_attributes('-alpha', 0)  
     #se calcula el posicionamiento de la ventana emergente, esto podría no funcionar el raspberry, en caso negativo comentar esto y la linea 38
     windowWidth = root.winfo_reqwidth()
     windowHeight = root.winfo_reqheight()
@@ -23,15 +24,12 @@ def MostrarUI(T,M):
     positionDown = int(root.winfo_screenheight()/3 - windowHeight/2)
 
     imagen=PhotoImage(file=foto)
-
     #Poner una imagen y texto encima con el atributo "compound", los colores se asignan con la funcion from_rgb, que toma una tupla (r,g,b) como parámetro
     #el fondo de la ventana tendrá el mismo color que el marco de la imagen (rgb 155,159,162)
-    image=Label(root,image=imagen,text="\n\n\n\n\n\n"+str(T)+"°C",bg=from_rgb((155,159,162)),compound=CENTER,font=fontStyle,fg=from_rgb((93,180,39)) if M==1 else from_rgb((254,0,0)))
+    image=Label(root,image=imagen,text="\n\n\n\n\n\n\n\n"+str(T)+"°C",bg=from_rgb((161,184,199)),compound=CENTER,font=fontStyle,fg=from_rgb((14,190,1)) if M==1 else from_rgb((254,0,0)))
 
-    #a esta ventana emergente se le transparenta el color rgb 155 159 162 para hacer la ilusión de que es una imagen flotando.
-    root.attributes("-transparentcolor",from_rgb((155,159,162)) )
-    #autodestrucción de la ui en 3 segundos
-    root.after(3000,lambda:root.destroy())
+    #autodestrucción de la ui en 3,5 segundos
+    root.after(3500,lambda:root.destroy())
     #poner las coordenadas de posicion en la ventana
     root.geometry("+{}+{}".format(positionRight-60, positionDown))
 
