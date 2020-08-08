@@ -1,7 +1,8 @@
 from pygame import mixer
 from tkinter import *
 from tkinter.font import Font
-#from pil import ImageTk, Image
+#from MYPIL import ImageTk, Image
+
 
 def voz(mask):
     archivo = 'Audios/Masc/Francisco1.ogg' if mask == 1 else 'Audios/Masc/Francisco2.ogg' 
@@ -11,7 +12,7 @@ def voz(mask):
     
 
 def MostrarUI(T,M):
-    foto = "ui-pasa.png" if M ==1 else "ui2.png"
+    foto = "ui-pasa.png" if M ==1 else "ui-mask.png"
     root = Tk()
     
     root.overrideredirect(True)
