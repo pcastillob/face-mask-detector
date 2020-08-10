@@ -17,13 +17,24 @@ import threading
 import pyttsx3
 import sys
 import xlsxwriter
+import logging
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from openpyxl import load_workbook
-
+from utilidades import image_resize
 from datetime import datetime
+import serial
+sexo = int(0)
+arduino = serial.Serial('COM3', 9600, timeout=0)
 Contador1 = int(0)
 Contador2 = int(0)
 Contador3 = int(0)
 identificador=int(0)
+#pab: funcion para calcular el área de la cara detectada
+def getArea(startY,endY,startX,endX):
+	largo=abs(startY-endY)
+	ancho=abs(startX-endX)
+	return largo*ancho
 
 def detect_and_predict_mask(frame, faceNet, maskNet):
 
@@ -42,21 +53,21 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
 	faces = []
 	locs = []
 	preds = []
+	area=0
 
 	# loop over the detections
 	for i in range(0, detections.shape[2]):
 		# extract the confidence (i.e., probability) associated with
 		# the detection
 		confidence = detections[0, 0, i, 2]
-
 		# filter out weak detections by ensuring the confidence is
 		# greater than the minimum confidence
 		if confidence > args["confidence"]:
+			#print("detectó uno")
 			# compute the (x, y)-coordinates of the bounding box for
 			# the object
 			box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
 			(startX, startY, endX, endY) = box.astype("int")
-
 			# ensure the bounding boxes fall within the dimensions of
 			# the frame
 			(startX, startY) = (max(0, startX), max(0, startY))
@@ -70,14 +81,23 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
 			face = img_to_array(face)
 			face = preprocess_input(face)
 
-			# add the face and bounding boxes to their respective
-			# lists
-			faces.append(face)
-			locs.append((startX, startY, endX, endY))
+			#pab: este es el código para calcular sólo una cara
+			#	  primero se crea la variable areaAux, que tendra un valor 0 (linea 56),
+			# 	  cada vez que detecte una cara en el frame, se calculará el área de dicha cara.
+			# 	  La primera cara calculada siempre pasará el if, por lo que se guardará los datos de la cara en faces, su coordenada en locs y su área en area
+			#     la siguiente cara se le calculará su área y se comparará con la ya guardada (areaAux vs area respectivamente)
+			#     si esta cara tiene mayor área, entonces se eliminan los elementos de la lista de caras y la lista de coordenadas (cara y su ubicación en los pixeles)
+			#	  luego sólo predicirá si esa cara con mayor área tiene o no mascara (linea 105)
+			areaAux=getArea(startY,endY,startX,endX)
+			if areaAux > area:
+				area=areaAux
+				faces.clear()
+				faces.append(face)
+				locs.clear()
+				locs.append((startX, startY, endX, endY))
 
 	# only make a predictions if at least one face was detected
 	if len(faces) > 0:
-        
 		# for faster inference we'll make batch predictions on all
 		# faces at the same time rather than one-by-one predictions
 		# in the above `for` loop
@@ -117,102 +137,102 @@ vs = VideoStream(src=0).start()
 time.sleep(2.0)
 
 # loop over the frames from the video stream
+executor = ThreadPoolExecutor(max_workers=1)
+contador = 0
+totalMask= 0
+totalSinMask= 0
+contadorFrames = 0
 while True:
-	# grab the frame from the threaded video stream and resize it
-	# to have a maximum width of 400 pixels
-	frame = vs.read()
-	frame = imutils.resize(frame, width=600)
 
-	# detect faces in the frame and determine if they are wearing a
-	# face mask or not
+	#pab: ajustar el width hasta que se vea bien, con 400 o 600 lo veía poco nitido, igual se puede reducir el 1080
+	frame = vs.read()
+	frame = imutils.resize(frame, width=500)	
+	
+	#flipHorizontal = cv2.flip(frame,1)
+
 	(locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
 
-	# loop over the detected face locations and their corresponding
-	# locations
-	for (box, pred) in zip(locs, preds):
-                # unpack the bounding box and predictions
+	# pab: probé y detecta 24 frames por segundo, 
+	# 	   si no funciona bien o tu camara tiene otro fps
+	# 	   cambiar ese 48 por fps*2 para tener un margen de 2 segundos
+	contadorFrames +=1
+	if contadorFrames == 48:
+		contador=0
+		totalMask=0
+		totalSinMask=0
+		contadorFrames=0
+	#if  (totalMask == 0 ) or (totalSinMask == 0):
+	#	cv.
+	cadena = arduino.readline()
+	if(cadena.decode() != '' and cadena.decode() != '0' and cadena.decode() != '1'):
+		temp=cadena.decode()
+	if(cadena.decode() == '0'):
+		temp="0"
+	if(cadena.decode() == ''):
+		temp="0"
+	if(cadena.decode() == '1'):
+		temp="99.9"
 
+	for (box, pred) in zip(locs, preds):
 		(startX, startY, endX, endY) = box
 		(mask, withoutMask) = pred
 		# determine the class label and color we'll use to draw
 		# the bounding box and text
 		label = "Tiene mascarilla" if mask > withoutMask else "No tiene mascarilla"
 		color = (0, 255, 0) if label == "Tiene mascarilla" else (0, 0, 255)
-		if mask > withoutMask:
-			time.sleep(1)
-			Contador1 = Contador1 + 1
-			Contador3 = Contador2 + Contador1
-			print(Contador1,Contador3)
-		if withoutMask > mask:
-			time.sleep(1)
-			Contador2 = Contador2 + 1
-			Contador3 = Contador2 + Contador1
-			print(Contador2,Contador3)
-		filepath="Registro.xlsx"
-		# load demo.xlsx 
-		wb=load_workbook(filepath)
-# select demo.xlsx
-		sheet=wb.active
-# set value for cell A1=1
-		sheet['B1'] = Contador1
-		sheet['B2'] = Contador2
-		sheet['B3'] = Contador3
-		sheet['A1'] = 'Con mascarilla'
-		sheet['A2'] = 'Sin mascarilla'
-		sheet['A3'] = 'Total'
-# save workbook 
-		wb.save(filepath)
 		# include the probability in the label
 		label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
-		if (withoutMask * 100) > 97:
-                                #speedo = Image.open('reserva.jpg').convert('RGBA')
-                                #imagen=Image.fromarray(frame)
-                                #imagen.paste(speedo,box=(230,80),mask=speedo)
-                                #frame= np.array(imagen)
-                                #voz.textTovoice(" bienvenido saco güeas".format(text))
-                                #App1()
-                                filepath1="Datos.xlsx"
-		# load demo.xlsx 
-                                wb1=load_workbook(filepath1)
-# select demo.xlsx
-                                sheet1=wb1.active
-# set value for cell A1=1
-                                sheet1['A1'] = 0
-                                wb1.save(filepath1)
-                                voz2.paass(label)
-                                #cv2.putText(frame, text, (0, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 200, 255), 2)
-                                
-		if (withoutMask*100) < 97:
-
-                                filepath1="Datos.xlsx"
-		# load demo.xlsx 
-                                wb1=load_workbook(filepath1)
-# select demo.xlsx
-                                sheet1=wb1.active
-# set value for cell A1=1
-                                sheet1['A1'] = 1
-                                wb1.save(filepath1)
-                                voz2.paass(label)
-                                #cv2.putText(frame, text, (0, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (150, 200, 255), 2)
-                                
-
+		
+		contadorFrames=0
+		totalMask +=  mask
+		totalSinMask +=  withoutMask
+		contador = contador+1
+		#pab: este contador indica que se tomarán 15 fotos de la persona para precedir si lleva o no máscara
+		#	  se puede cambiar a gusto, antes lo tenia en 20 y para probar la ui lo dejaba en 1
+		if(cadena.decode()!='' && cadena.decode()!='S' !=cadena.decode()!='s' ):
+			if	contador == 5:
+				contador = 0
+				print("Entró al if")
+				print("Total sin mask: " + str(totalSinMask))
+				print("Total con mask: " + str(totalMask))
+				if totalMask > totalSinMask and float(temp)<37.4:
+					print("resultado: con mascarilla")
+					executor.submit(voz2.voz,1,float(temp),sexo)	
+					voz2.MostrarUI(float(temp),1)
+					arduino.write('a'.encode())
+				elif totalMask > totalSinMask and float(temp)>=37.4:
+					print("resultado: con mascarilla")
+					executor.submit(voz2.voz,1,float(temp),sexo)	
+					voz2.MostrarUI(float(temp),0)
+					arduino.write('a'.encode())
+				else:
+					print("resultado: sin mascarilla")
+					executor.submit(voz2.voz,0,float(temp),sexo)
+					voz2.MostrarUI(float(temp),0)
+					arduino.write('a'.encode())
 
 		# display the label and bounding box rectangle on the output
 		# frame
-		cv2.putText(frame, label, (startX, startY - 10),
-			cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
+		
 		cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
-
-
+	#pab: Poner la marca de agua reemplazando los pixeles afectados
+	
+	#configuraciones de formato
+	cv2.namedWindow("Detector de mascarilla", cv2.WND_PROP_FULLSCREEN)
+	cv2.setWindowProperty("Detector de mascarilla",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
+	frame=cv2.cvtColor(frame,cv2.COLOR_BGRA2BGR)
 	# show the output frame
-	cv2.imshow("Frame", frame)
+	cv2.imshow("Detector de mascarilla", frame)
     
 	key = cv2.waitKey(1) & 0xFF
 
 	# if the `q` key was pressed, break from the loop
 	if key == ord("q"):
 		break
-
+	if key == ord("f"):
+		sexo=0
+	if key == ord("m"):
+		sexo=1
 # do a bit of cleanup
 #cv2.destroyAllWindows()
 #vs.stop()
