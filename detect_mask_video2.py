@@ -11,28 +11,20 @@ import argparse
 import imutils
 import time
 import cv2
+import tkinter as tk
 #from PIL import Image,ImageFont,ImageDraw
+from MYPIL import Image, ImageTk
 import voz2
+from tkinter.font import Font
 import os
-import threading
-import pyttsx3
 import sys
 import logging
-import subprocess
 from concurrent.futures import ThreadPoolExecutor
-from openpyxl import load_workbook
 from utilidades import image_resize
-
 from datetime import datetime
 
 
-
-
-
 # construct the argument parser and parse the arguments
-
-
-
 
 class Applicacion:
 	def __init__(self):
@@ -66,15 +58,39 @@ class Applicacion:
 		self.totalMask= 0
 		self.totalSinMask= 0
 		self.contadorFrames = 0
-
+		self.current_image = None
 		# Crear elementos gráficos
-		#self.root = tk.TK()
+		self.root = tk.Tk()
+		self.top = tk.Toplevel()
+		self.root.title("PyImageSearch PhotoBooth")  # set window title
+		self.root.protocol('WM_DELETE_WINDOW',self.destructor)
+		self.panel = tk.Label(self.root)
+		self.panel.pack(padx=10, pady=10)
 		self.video_loop()
+
+	def MostrarUI(self,T,M):
+		
+		#top = tk.Toplevel()
+		global imagen 
+		self.top.overrideredirect(True)
+		fontStyle = Font(family="Arial", size=48)
+		windowWidth = self.top.winfo_reqwidth()
+		windowHeight = self.top.winfo_reqheight()
+		positionRight = int(self.top.winfo_screenwidth()/2 - windowWidth/2)
+		positionDown = int(self.top.winfo_screenheight()/3 - windowHeight/2)
+		imagen=tk.PhotoImage(file="ui-pasa.png" if M ==1 else "ui-mask.png")
+		image=tk.Label(self.top,image=imagen,text="\n\n\n\n\n\n\n\n"+str(T)+"°C",bg=self.from_rgb((161,184,199)),compound=tk.CENTER,font=fontStyle,fg=self.from_rgb((14,190,1)) if M==1 else self.from_rgb((254,0,0))).pack()
+		self.top.after(3500,lambda:self.top.destroy())
+		self.top.geometry("+{}+{}".format(positionRight-60, positionDown))
+		#top.mainloop()
+
+	def from_rgb(self,rgb):
+		return "#%02x%02x%02x" % rgb
 
 	def video_loop(self):
 		while True:
 			frame = self.vs.read()
-			frame = imutils.resize(frame,width=400)	
+			#frame = imutils.resize(frame,width=400)	
 			#flipHorizontal = cv2.flip(frame,1)
 			(locs, preds) = self.detect_and_predict_mask(frame, self.faceNet, self.maskNet)
 			self.contadorFrames +=1
@@ -101,12 +117,12 @@ class Applicacion:
 					if self.totalMask > self.totalSinMask:
 						print("resultado: con mascarilla")
 						self.executor.submit(voz2.voz,1)	
-						voz2.MostrarUI(37,1)	
+						self.MostrarUI(37,1)	
 					else:
 						print("resultado: sin mascarilla")
 						self.executor.submit(voz2.voz,0)
-						voz2.MostrarUI(38.5,0)		
-				cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
+						self.MostrarUI(38.5,0)		
+				#cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
 			#pab: Poner la marca de agua reemplazando los pixeles afectados
 			#configuraciones de formato
 			#cv2.namedWindow("ventana", cv2.WND_PROP_FULLSCREEN)
@@ -117,15 +133,24 @@ class Applicacion:
 			#cv2.setWindowProperty("ventana",CV2_WND_PROP_ASPECTRATIO,CV_WINDOW_FREERATIO)
 			#cv2.setWindowProperty("ventana",cv2.WND_PROP_FULLSCREEN,cv2.WND_PROP_FULLSCREEN)
 
-			cv2.namedWindow("ventana", cv2.WINDOW_NORMAL)
-			cv2.setWindowProperty("ventana",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
+			#cv2.namedWindow("ventana", cv2.WINDOW_NORMAL)
+			#cv2.setWindowProperty("ventana",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
 
 			#cvSetWindowProperty("ventana", CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
-			frame=cv2.cvtColor(frame,cv2.COLOR_BGRA2BGR)
-			cv2.imshow("ventana", frame)
-			key = cv2.waitKey(1) & 0xFF
-			if key == ord("q"):
-				break
+			#COLOR_BGR2RGB
+			self.imagen_actual=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
+			self.imagen_actual=Image.fromarray(self.imagen_actual)
+			self.imagen_actual= ImageTk.PhotoImage(image=self.imagen_actual)
+			self.panel.image =self.imagen_actual
+			self.panel.configure(image=self.imagen_actual)
+			self.panel.image=self.imagen_actual
+			#cv2.imshow("ventana", frame)
+			
+
+	def destructor(self):
+		self.root.destroy()
+		self.vs.release()
+		cv2.destroyAllWindows()
 
 	def getArea(self,startY,endY,startX,endX):
 		largo=abs(startY-endY)
@@ -173,3 +198,4 @@ class Applicacion:
 #cv2.destroyAllWindows()
 #vs.stop()
 app = Applicacion()
+app.root.mainloop()

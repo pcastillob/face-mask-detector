@@ -1,7 +1,7 @@
 from pygame import mixer
 from tkinter import *
 from tkinter.font import Font
-#from MYPIL import ImageTk, Image
+from MYPIL import ImageTk, Image
 
 
 def voz(mask):

@@ -39,6 +39,7 @@ class Application:
             imgtk = ImageTk.PhotoImage(image=self.current_image)  # convert image for tkinter
             self.panel.imgtk = imgtk  # anchor imgtk so it does not be deleted by garbage-collector
             self.panel.config(image=imgtk)  # show the image
+           
         self.root.after(30, self.video_loop)  # call the same function after 30 milliseconds
 
     def take_snapshot(self):
