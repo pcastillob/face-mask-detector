@@ -15,6 +15,7 @@ from MYPIL import ImageTk, Image
 import cv2
 import voz2
 import os
+import sys
 
 
 logger = logging.getLogger("VideoStream")
@@ -51,16 +52,23 @@ def cargar_modelo():
     maskNet = load_model(args["model"])
     return faceNet,maskNet
 
-def video_stream_loop(video_stream: cv2.VideoCapture, queue: Queue, stop_event: Event):
+def video_stream_loop(video_stream: cv2.VideoCapture, img_ui: Queue,img_process: Queue, stop_event: Event,pausa_event: Event):
     print("VIDEO STREAM LOOP")
     while not stop_event.is_set():
         try:
             success, img = video_stream.read()
-            # We need a timeout here to not get stuck when no images are retrieved from the queue
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            queue.put(img, timeout=30)
+            if success:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                if not pausa_event.is_set():
+                    img_ui.put(img, timeout=15)
+                    img_process.put(img,timeout=15)
+                else:
+                    img_ui.put(img, timeout=30)
         except Full:
             pass  # try again with a newer frame
+    print("STOP DEL VIDEO")
+    video_stream.release()
+    sys.exit()
 
 def getArea(startY,endY,startX,endX):
 	largo=abs(startY-endY)
@@ -86,7 +94,7 @@ def detect_and_predict_mask(frame,faceNet,maskNet):
             (endX,endY) = (min(w-1,endX),min(h-1,endY))
             face=frame[startY:endY,startX:endX]
             face=cv2.cvtColor(face,cv2.COLOR_BGR2RGB)
-            face=cv2.resize(face,(244,244))
+            face=cv2.resize(face,(224,224))
             face=img_to_array(face)
             face=preprocess_input(face)
             areaAux=getArea(startY,endY,startX,endX)
@@ -102,22 +110,14 @@ def detect_and_predict_mask(frame,faceNet,maskNet):
         preds=maskNet.predict(faces,batch_size=32)
     return (locs,preds)
 
-def processing_loop(input_queue: Queue, output_queue: Queue, stop_event: Event, faceNet , maskNet):
+def processing_loop(input_queue: Queue,  stop_event: Event,pausa_event: Event, faceNet , maskNet):
     print("PROCESSING")
     contador = 0
     totalMask= 0
     totalSinMask= 0
     contadorFrames = 0
-    
-    """if input_queue.qsize() >= 70:
-                with input_queue.mutex:
-                    input_queue.queue.clear()"""
-    
     while not stop_event.is_set():
-        
         try:
-            
-           # print("TRY")
             img = input_queue.get()
             #img = imutils.resize(img, width=500)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -139,29 +139,35 @@ def processing_loop(input_queue: Queue, output_queue: Queue, stop_event: Event, 
                 totalMask +=  mask
                 totalSinMask +=  withoutMask
                 contador = contador+1
-                print("total sin mask: "+str(totalSinMask))
+                
                 if	contador == 15:
                     contador = 0
                     print("Entró al if")
                     print("Total sin mask: " + str(totalSinMask))
                     print("Total con mask: " + str(totalMask))
+                    pausa_event.set()
                     if totalMask > totalSinMask:
                         print("resultado: con mascarilla")
                         voz2.voz(1)
-                        with output_queue.mutex:
-                            output_queue.queue.clear()
+                        time.sleep(4)
+                        pausa_event.clear()
+                       # with output_queue.mutex:
+                        #    output_queue.queue.clear()
                      #   voz2.MostrarUI(37,1)	
                     else:
                         print("resultado: sin mascarilla")
                         voz2.voz(0)
-                        with output_queue.mutex:
-                            output_queue.queue.clear()
+                        time.sleep(4)
+                        pausa_event.clear()
+                        #with output_queue.mutex:
+                         #   output_queue.queue.clear()
                       #  voz2.MostrarUI(38.5,0)
             # We need a timeout here to not get stuck when no images are retrieved from the queue
-            output_queue.put(img, timeout=33)
+           # output_queue.put(img, timeout=33)
         except Full:
             pass  # try again with a newer frame
-
+    print("STOP DEL PROCESSING")
+    sys.exit()
 
 class App:
     def __init__(self, window, window_title, image_queue: Queue, image_dimensions: tuple):
@@ -178,7 +184,7 @@ class App:
         self.labelAbajo = tkinter.Label(window,text="Por favor, acérquese al tótem.",font=self.fontStyle,pady=20).pack()
         
         # After it is called once, the update method will be automatically called every delay milliseconds
-        self.delay = 1
+        self.delay = 10
         self.update()
 
         self.window.mainloop()
@@ -196,20 +202,24 @@ class App:
 def main():
     faceNet,maskNet=cargar_modelo()
     stream, width, height = setup_webcam_stream(0)
-    webcam_queue = Queue()
-    processed_queue = Queue(maxsize=1000)
+    cola_ui = Queue()
+    cola_processing = Queue()
+    #processed_queue = Queue(maxsize=1000)
     stop_event = Event()
     window_name = "FPS Multi Threading"
-
+    pausa_event= Event()
     try:
-        Thread(target=video_stream_loop, args=[stream, webcam_queue, stop_event]).start()
-        Thread(target=processing_loop, args=[webcam_queue, processed_queue, stop_event, faceNet, maskNet]).start()
-        App(tkinter.Tk(), window_name, webcam_queue, (width, height))
+        Thread(name="hilo1",target=video_stream_loop, args=[stream, cola_ui,cola_processing, stop_event,pausa_event]).start()
+        Thread(name="hilo2",target=processing_loop, args=[cola_processing , stop_event,pausa_event, faceNet, maskNet]).start()
+        App(tkinter.Tk(), window_name, cola_ui, (width, height))
     finally:
+        print("APRETANDO STOP")
         stop_event.set()
 
-    print(f"Webcam queue: {webcam_queue.qsize()}")
-    print(f"Processed queue: {processed_queue.qsize()}")
+    print(f"UI queue: {cola_ui.qsize()}")
+    print(f"process queue: {cola_processing.qsize()}")
+    
+  #  print(f"Processed queue: {processed_queue.qsize()}")
 
 
 if __name__ == "__main__":
