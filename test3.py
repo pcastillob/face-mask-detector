@@ -19,9 +19,7 @@ import sys
 import serial
 arduino = serial.Serial('/dev/ttyUSB0', 9600, timeout=0)
 
-
 logger = logging.getLogger("VideoStream")
-
 
 def setup_webcam_stream(src=0):
     cap = cv2.VideoCapture(src)
@@ -149,7 +147,6 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
     return (locs, preds)
 
 def getTemp(temp_event: Event,stop_event: Event,tempe_queue:Queue):
-    contador = 0
     while not stop_event.is_set():
         if not temp_event.is_set():
             cadena = arduino.readline()
@@ -175,7 +172,7 @@ def getTemp(temp_event: Event,stop_event: Event,tempe_queue:Queue):
                     temp=0
             except:
                 pass
-def processing_loop(input_queue: Queue,resultado_queue: Queue,  stop_event: Event,pausa_event: Event, faceNet , maskNet,audio_aprobado,audio_pongaseMask,audio_tempElevada,audio_noCumpleReq,temp_event,tempe_queue):
+def processing_loop(video_stream: cv2.VideoCapture,input_queue: Queue,resultado_queue: Queue,  stop_event: Event,pausa_event: Event, faceNet , maskNet,audio_aprobado,audio_pongaseMask,audio_tempElevada,audio_noCumpleReq,temp_event,tempe_queue):
     print("PROCESSING")
     contador = 0
     temp=0
@@ -184,9 +181,6 @@ def processing_loop(input_queue: Queue,resultado_queue: Queue,  stop_event: Even
     contadorFrames = 0
     while not stop_event.is_set():
         try:
-            img = input_queue.get(timeout=15)
-            img = imutils.resize(img, width=400)
-            #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             contadorFrames +=1
             if contadorFrames == 48:
                 contador=0
@@ -196,77 +190,80 @@ def processing_loop(input_queue: Queue,resultado_queue: Queue,  stop_event: Even
                 temp_event.clear()
             if temp_event.is_set():
                 print("Hay evento temepratura")
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                (locs, preds) = detect_and_predict_mask(img, faceNet, maskNet)
-                for (box, pred) in zip(locs, preds):
-                    (mask, withoutMask) = pred
-                    # determine the class label and color we'll use to draw
-                    # the bounding box and text                
-                    contadorFrames=0
-                    print("DETECTÓ UNA CARA")
-                    totalMask +=  mask
-                    totalSinMask +=  withoutMask
-                    contador +=  1
-                    if  contador == 5:
-                        contador = 0
-                        print("Entró al if")
-                        print("Total sin mask: " + str(totalSinMask))
-                        print("Total con mask: " + str(totalMask))
-                        pausa_event.set()
-                        temp = tempe_queue.get()
-                        print(str(temp))
-                        #modificar acá para poner el codigo del sensor
-                        if totalMask > totalSinMask:
-                            if  37.4 > float(temp):   
-                                totalMask=0
-                                totalSinMask=0
-                                print("resultado: con mascarilla y temp aceptable")
-                                resultado_queue.put_nowait("pasa")
-                                audio_aprobado.play()
-                                for n in range(input_queue.qsize()):
-                                    input_queue.get_nowait()
-                                #voz2.voz(1)
-                                time.sleep(5)
-                                pausa_event.clear()
-                                temp_event.clear()
+                success, img = video_stream.read()
+                if success:
+                    #puede ser 
+                    #img = imutils.resize(img, width=400)
+                    (locs, preds) = detect_and_predict_mask(img, faceNet, maskNet)
+                    for (box, pred) in zip(locs, preds):
+                        (mask, withoutMask) = pred
+                        # determine the class label and color we'll use to draw
+                        # the bounding box and text                
+                        contadorFrames=0
+                        print("DETECTÓ UNA CARA")
+                        totalMask +=  mask
+                        totalSinMask +=  withoutMask
+                        contador +=  1
+                        if  contador == 5:
+                            contador = 0
+                            print("Entró al if")
+                            print("Total sin mask: " + str(totalSinMask))
+                            print("Total con mask: " + str(totalMask))
+                            pausa_event.set()
+                            temp = tempe_queue.get()
+                            print(str(temp))
+                            #modificar acá para poner el codigo del sensor
+                            if totalMask > totalSinMask:
+                                if  37.4 > float(temp):   
+                                    totalMask=0
+                                    totalSinMask=0
+                                    print("resultado: con mascarilla y temp aceptable")
+                                    resultado_queue.put_nowait("pasa")
+                                    audio_aprobado.play()
+                                    for n in range(input_queue.qsize()):
+                                        input_queue.get_nowait()
+                                    #voz2.voz(1)
+                                    time.sleep(5)
+                                    pausa_event.clear()
+                                    temp_event.clear()
+                                else:
+                                    totalMask=0
+                                    totalSinMask=0
+                                    #TIENE MASCARILLA
+                                    print("resultado: con mascarilla pero temp elevada")
+                                    resultado_queue.put_nowait("denegado")
+                                    audio_tempElevada.play()
+                                    for n in range(input_queue.qsize()):
+                                        input_queue.get_nowait()
+                                    #voz2.voz(1)
+                                    time.sleep(5)
+                                    pausa_event.clear()
+                                    temp_event.clear()
                             else:
-                                totalMask=0
-                                totalSinMask=0
-                                #TIENE MASCARILLA
-                                print("resultado: con mascarilla pero temp elevada")
-                                resultado_queue.put_nowait("denegado")
-                                audio_tempElevada.play()
-                                for n in range(input_queue.qsize()):
-                                    input_queue.get_nowait()
-                                #voz2.voz(1)
-                                time.sleep(5)
-                                pausa_event.clear()
-                                temp_event.clear()
-                        else:
-                            if  37.4 > float(temp):
-                                totalMask=0
-                                totalSinMask=0
-                                print("resultado: sin mascarilla y buena temp")
-                                resultado_queue.put_nowait("denegado")
-                                audio_pongaseMask.play()
-                                for n in range(input_queue.qsize()):
-                                    input_queue.get_nowait()
-                                time.sleep(5)
-                                pausa_event.clear()
-                                temp_event.clear()
-                            else:
-                                totalMask=0
-                                totalSinMask=0
-                                print("resultado: sin mascarilla y temp elevada")
-                                resultado_queue.put_nowait("denegado")
-                                audio_noCumpleReq.play()
-                                for n in range(input_queue.qsize()):
-                                    input_queue.get_nowait()
-                                time.sleep(5)
-                                pausa_event.clear()
-                                temp_event.clear()
-                # We need a timeout here to not get stuck when no images are retrieved from the queue
-               # output_queue.put(img, timeout=33)
+                                if  37.4 > float(temp):
+                                    totalMask=0
+                                    totalSinMask=0
+                                    print("resultado: sin mascarilla y buena temp")
+                                    resultado_queue.put_nowait("denegado")
+                                    audio_pongaseMask.play()
+                                    for n in range(input_queue.qsize()):
+                                        input_queue.get_nowait()
+                                    time.sleep(5)
+                                    pausa_event.clear()
+                                    temp_event.clear()
+                                else:
+                                    totalMask=0
+                                    totalSinMask=0
+                                    print("resultado: sin mascarilla y temp elevada")
+                                    resultado_queue.put_nowait("denegado")
+                                    audio_noCumpleReq.play()
+                                    for n in range(input_queue.qsize()):
+                                        input_queue.get_nowait()
+                                    time.sleep(5)
+                                    pausa_event.clear()
+                                    temp_event.clear()
+                    # We need a timeout here to not get stuck when no images are retrieved from the queue
+                # output_queue.put(img, timeout=33)
         except Full:
             pass  # try again with a newer frame
     print("STOP DEL PROCESSING")
@@ -329,8 +326,8 @@ def main():
     pausa_event= Event()
     temp_event=Event()
     try:
-        Thread(name="hilo1",target=video_stream_loop, args=[stream, cola_processing, stop_event,pausa_event]).start()
-        Thread(name="hilo2",target=processing_loop, args=[cola_processing ,resultado_queue, stop_event,pausa_event, faceNet, maskNet, audio_aprobado,audio_pongaseMask,audio_tempElevada,audio_noCumpleReq,temp_event,tempe_queue]).start()
+        #Thread(name="hilo1",target=video_stream_loop, args=[stream, cola_processing, stop_event,pausa_event]).start()
+        Thread(name="hilo2",target=processing_loop, args=[stream,cola_processing ,resultado_queue, stop_event,pausa_event, faceNet, maskNet, audio_aprobado,audio_pongaseMask,audio_tempElevada,audio_noCumpleReq,temp_event,tempe_queue]).start()
         Thread(name="hilo3",target=getTemp,args=[temp_event,stop_event,tempe_queue]).start()
         App(tkinter.Tk(), resultado_queue,pausa_event)
     finally:

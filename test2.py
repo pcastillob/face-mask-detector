@@ -110,7 +110,7 @@ def detect_and_predict_mask(frame,faceNet,maskNet):
         preds=maskNet.predict(faces,batch_size=32)
     return (locs,preds)
 
-def processing_loop(input_queue: Queue,resultado_queue: Queue,  stop_event: Event,pausa_event: Event, faceNet , maskNet,audio_aprobado,audio_rechazado):
+def processing_loop(video_stream: cv2.VideoCapture,input_queue: Queue,resultado_queue: Queue,  stop_event: Event,pausa_event: Event, faceNet , maskNet,audio_aprobado,audio_rechazado):
     print("PROCESSING")
     contador = 0
     totalMask= 0
@@ -118,63 +118,65 @@ def processing_loop(input_queue: Queue,resultado_queue: Queue,  stop_event: Even
     contadorFrames = 0
     while not stop_event.is_set():
         try:
-            img = input_queue.get(timeout=20)
+            success, img = video_stream.read()
             #img = imutils.resize(img, width=500)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            #img = img[:, ::-1]  # mirror
-            #time.sleep(0.01)  # simulate some processing time
-            (locs, preds) = detect_and_predict_mask(img, faceNet, maskNet)
-            contadorFrames +=1
-            if contadorFrames == 24:
-                contador=0
-                totalMask=0
-                totalSinMask=0
-                contadorFrames=0
-           # print(preds)
-            for (box, pred) in zip(locs, preds):
-                (mask, withoutMask) = pred
-                # determine the class label and color we'll use to draw
-                # the bounding box and text                
-                contadorFrames=0
-                totalMask +=  mask
-                totalSinMask +=  withoutMask
-                contador = contador+1
-                if	contador == 15:
-                    contador = 0
-                    print("Entró al if")
-                    print("Total sin mask: " + str(totalSinMask))
-                    print("Total con mask: " + str(totalMask))
-                    pausa_event.set()
-                    #modificar acá para poner el codigo del sensor
-                    if totalMask > totalSinMask:
-                        totalMask=0
-                        totalSinMask=0
-                        #TIENE MASCARILLA
-                        print("resultado: con mascarilla")
-                        resultado_queue.put_nowait("pasa")
-                        audio_aprobado.play()
-                        for n in range(input_queue.qsize()):
-                            input_queue.get_nowait()
-                        #voz2.voz(1)
-                        time.sleep(5)
-                        pausa_event.clear()	
-                    else:
-                        totalMask=0
-                        totalSinMask=0
-                        #NO TIENE MASCARILLA
-                        print("resultado: sin mascarilla")
-                        resultado_queue.put_nowait("denegado")
-                        audio_rechazado.play()
-                        for n in range(input_queue.qsize()):
-                            input_queue.get_nowait()
-                        #voz2.voz(0)
-                        time.sleep(5)
-                        pausa_event.clear()
-            # We need a timeout here to not get stuck when no images are retrieved from the queue
-           # output_queue.put(img, timeout=33)
+            if success:
+                #img = img[:, ::-1]  # mirror
+                #time.sleep(0.01)  # simulate some processing time
+                (locs, preds) = detect_and_predict_mask(img, faceNet, maskNet)
+                contadorFrames +=1
+                if contadorFrames == 24:
+                    contador=0
+                    totalMask=0
+                    totalSinMask=0
+                    contadorFrames=0
+            # print(preds)
+                for (box, pred) in zip(locs, preds):
+                    (mask, withoutMask) = pred
+                    # determine the class label and color we'll use to draw
+                    # the bounding box and text                
+                    contadorFrames=0
+                    totalMask +=  mask
+                    totalSinMask +=  withoutMask
+                    contador = contador+1
+                    if	contador == 15:
+                        contador = 0
+                        print("Entró al if")
+                        print("Total sin mask: " + str(totalSinMask))
+                        print("Total con mask: " + str(totalMask))
+                        pausa_event.set()
+                        #modificar acá para poner el codigo del sensor
+                        if totalMask > totalSinMask:
+                            totalMask=0
+                            totalSinMask=0
+                            #TIENE MASCARILLA
+                            print("resultado: con mascarilla")
+                            resultado_queue.put_nowait("pasa")
+                            audio_aprobado.play()
+                            for n in range(input_queue.qsize()):
+                                input_queue.get_nowait()
+                            #voz2.voz(1)
+                            time.sleep(5)
+                            pausa_event.clear()	
+                        else:
+                            totalMask=0
+                            totalSinMask=0
+                            #NO TIENE MASCARILLA
+                            print("resultado: sin mascarilla")
+                            resultado_queue.put_nowait("denegado")
+                            audio_rechazado.play()
+                            for n in range(input_queue.qsize()):
+                                input_queue.get_nowait()
+                            #voz2.voz(0)
+                            time.sleep(5)
+                            pausa_event.clear()
+                # We need a timeout here to not get stuck when no images are retrieved from the queue
+            # output_queue.put(img, timeout=33)
+                    
         except Full:
             pass  # try again with a newer frame
     print("STOP DEL PROCESSING")
+    video_stream.release()
     sys.exit()
 
 class App:
@@ -220,7 +222,6 @@ def main():
     stream, width, height = setup_webcam_stream(0)
     resultado_queue = Queue()
     #evento_ui = Event()
-
     cola_processing = Queue()
     pygame.init()
     audio_aprobado = pygame.mixer.Sound('Audios/Masc/Francisco1.ogg')
@@ -229,8 +230,8 @@ def main():
     stop_event = Event()
     pausa_event= Event()
     try:
-        Thread(name="hilo1",target=video_stream_loop, args=[stream, cola_processing, stop_event,pausa_event]).start()
-        Thread(name="hilo2",target=processing_loop, args=[cola_processing ,resultado_queue, stop_event,pausa_event, faceNet, maskNet, audio_aprobado,audio_rechazado]).start()
+        #Thread(name="hilo1",target=video_stream_loop, args=[stream, cola_processing, stop_event,pausa_event]).start()
+        Thread(name="hilo2",target=processing_loop, args=[stream,cola_processing ,resultado_queue, stop_event,pausa_event, faceNet, maskNet, audio_aprobado,audio_rechazado]).start()
         App(tkinter.Tk(), resultado_queue,pausa_event)
     finally:
         print("APRETANDO STOP")
