@@ -123,7 +123,8 @@ def getTemp():
     var = cadena.decode()
     #Este es la condición requerida
     if(cadena != b'' and cadena!=b'100\r\n' and cadena!=b'0\r\n'):
-        print("obtuvo la temperatura")
+        #print("obtuvo la temperatura")
+        print("TEMPERATURA: "+ str(var))
         return var
     elif(cadena == b'1'):
         return 99.9
@@ -170,6 +171,7 @@ def processing_loop(video_stream: VideoStream,resultado_queue: Queue,  stop_even
                         cargando_event.set()
             #print(temp)
             img=video_stream.read()
+            #print("imagen de la cámara")
             contadorFrames +=1
             #Si hay 48 imagenes sin detectar un rostro, se reinician las variables para empezar el funcionamiento desde cero
             if contadorFrames == 48:
@@ -177,13 +179,14 @@ def processing_loop(video_stream: VideoStream,resultado_queue: Queue,  stop_even
                 totalMask=0
                 totalSinMask=0
                 contadorFrames=0
+                temp_bool=True
                 cargando_event.clear()
             (locs, preds) = detect_and_predict_mask(img, faceNet, maskNet)
             for (box, pred) in zip(locs, preds):
                 (mask, withoutMask) = pred
                 contadorFrames=0
-                print("detectó una cara")
-                #contadoresl resultado de la detección de mascarilla
+                #print("detectó una cara")
+                #contadores resultado de la detección de mascarilla
                 totalMask +=  mask
                 totalSinMask +=  withoutMask
                 contador +=  1
@@ -220,7 +223,7 @@ def processing_loop(video_stream: VideoStream,resultado_queue: Queue,  stop_even
                                     totalSinMask=0
                                     #TIENE MASCARILLA
                                     print("resultado: con mascarilla pero temp elevada")
-                                    resultado_queue.put_nowait("denegado")
+                                    resultado_queue.put_nowait("elevada")
                                     audio_tempElevada.play()
                                     #voz2.voz(1)
                                     listo = False
@@ -242,7 +245,7 @@ def processing_loop(video_stream: VideoStream,resultado_queue: Queue,  stop_even
                                     totalMask=0
                                     totalSinMask=0
                                     print("resultado: sin mascarilla y temp elevada")
-                                    resultado_queue.put_nowait("denegado")
+                                    resultado_queue.put_nowait("elevada")
                                     audio_noCumpleReq.play()            
                                     time.sleep(17)
                                     pausa_event.clear()
@@ -273,20 +276,37 @@ class App:
         self.label.pack()
         # After it is called once, the update method will be automatically called every delay milliseconds
         self.delay = 100
+        self.num=0
         self.update()
         #self.window
         self.window.mainloop()
-
+    def update_parpadeo(self):
+        #print("enbtró al parpadeo")
+        hora = time.strftime("%H:%M")
+        archivo = "negro-red.png" if self.num%2 == 0 else "negro-blank.png"
+        self.imagen=PhotoImage(file=archivo)
+        self.label.configure(image=self.imagen,text="\n\n\n\n\n\n\n\n\n\n\n"+hora,fg="white",font=self.font)
+        self.label.image=self.imagen
+        self.num +=1
+        if self.num==34:
+            self.num=0
+            self.window.after(500,self.update)
+        else:
+            self.window.after(500,self.update_parpadeo)
+        
     def update(self):        
         try:
             hora = time.strftime("%H:%M")
             if self.resultado_evento.is_set():
                 res = self.resultado_queue.get()
-                archivo = "negro-green.png" if res == "pasa" else "negro-red.png"
-                self.imagen=PhotoImage(file=archivo)
-                self.label.configure(image=self.imagen,text="\n\n\n\n\n\n\n\n\n\n\n"+hora,fg="white",font=self.font)
-                self.label.image=self.imagen
-                self.window.after(5000,self.update)
+                if res =="pasa" or res=="denegado":
+                    archivo = "negro-green.png" if res == "pasa" else "negro-red.png"
+                    self.imagen=PhotoImage(file=archivo)
+                    self.label.configure(image=self.imagen,text="\n\n\n\n\n\n\n\n\n\n\n"+hora,fg="white",font=self.font)
+                    self.label.image=self.imagen
+                    self.window.after(5000,self.update)
+                else:
+                    self.update_parpadeo()
             else:
                 if not self.cargando_event.is_set():
                     txt = "\n\n\n\n\n\n\n\n\n\n\n"+hora
